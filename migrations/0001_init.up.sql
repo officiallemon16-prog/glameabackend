@@ -1,0 +1,83 @@
+CREATE TABLE IF NOT EXISTS users (
+    id CHAR(36) PRIMARY KEY,
+    email VARCHAR(255) NULL,
+    email_verified_at TIMESTAMP NULL,
+    phone VARCHAR(32) NULL,
+    phone_verified_at TIMESTAMP NULL,
+    first_name VARCHAR(120) NULL,
+    last_name VARCHAR(120) NULL,
+    avatar_media_id CHAR(36) NULL,
+    role ENUM('CUSTOMER','PROFESSIONAL','ADMIN') NOT NULL DEFAULT 'CUSTOMER',
+    status ENUM('ACTIVE','SUSPENDED','DISABLED') NOT NULL DEFAULT 'ACTIVE',
+    password_hash VARCHAR(255) NULL,
+    last_login_at TIMESTAMP NULL,
+    last_login_ip VARCHAR(45) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_users_email (email),
+    UNIQUE KEY uq_users_phone (phone),
+    KEY idx_users_status (status),
+    KEY idx_users_role (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id CHAR(36) PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP NULL,
+    ip VARCHAR(45) NULL,
+    user_agent VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_auth_sessions_token_hash (token_hash),
+    KEY idx_auth_sessions_user (user_id),
+    CONSTRAINT fk_auth_sessions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS categories (
+    id CHAR(36) PRIMARY KEY,
+    slug VARCHAR(120) NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    description TEXT NULL,
+    icon_media_id CHAR(36) NULL,
+    display_order INT NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_categories_slug (slug)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS professionals (
+    id CHAR(36) PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    business_name VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255) NULL,
+    bio TEXT NULL,
+    category_id CHAR(36) NULL,
+    experience_years INT NULL,
+    rating DECIMAL(3,2) NOT NULL DEFAULT 0.00,
+    review_count INT NOT NULL DEFAULT 0,
+    booking_count INT NOT NULL DEFAULT 0,
+    completion_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    status ENUM('PENDING','ACTIVE','SUSPENDED','DEACTIVATED') NOT NULL DEFAULT 'PENDING',
+    verification_status ENUM('UNVERIFIED','PENDING','VERIFIED','REJECTED') NOT NULL DEFAULT 'UNVERIFIED',
+    trust_score DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    latitude DECIMAL(10,7) NULL,
+    longitude DECIMAL(10,7) NULL,
+    address_line VARCHAR(255) NULL,
+    city VARCHAR(120) NULL,
+    country VARCHAR(2) NULL DEFAULT 'NG',
+    timezone VARCHAR(64) NULL,
+    home_service_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    service_radius_km DECIMAL(6,2) NULL,
+    travel_fee_per_km DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_professionals_user (user_id),
+    KEY idx_professionals_status_verification (status, verification_status),
+    KEY idx_professionals_city (city),
+    KEY idx_professionals_category (category_id),
+    KEY idx_professionals_coords (latitude, longitude),
+    CONSTRAINT fk_professionals_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_professionals_category FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

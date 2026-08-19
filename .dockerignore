@@ -1,0 +1,13 @@
+bin/
+.env
+*.log
+coverage.out
+tmp/
+uploads/
+docs/
+tests/
+scripts/
+sql/
+frontend/
+.git/
+dump.rdb

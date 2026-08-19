@@ -1,0 +1,13 @@
+bin/
+*.exe
+.env
+*.log
+*.txt
+coverage.out
+tmp/
+*-firebase-adminsdk-*.json
+uploads/
+frontend/build/
+frontend/.dart_tool/
+frontend/.packages
+frontend/pubspec.lock

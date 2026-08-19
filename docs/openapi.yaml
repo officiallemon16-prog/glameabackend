@@ -1,0 +1,200 @@
+openapi: 3.0.3
+info:
+  title: Glamea Backend API
+  version: 0.1.0
+  description: Visual beauty marketplace connecting customers with beauty professionals.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        first_name: { type: string }
+        last_name: { type: string }
+        avatar_media_id: { type: string, nullable: true }
+        role: { type: string, enum: [CUSTOMER, PROFESSIONAL, ADMIN] }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, DISABLED] }
+        email_verified: { type: boolean }
+        phone_verified: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer }
+    SuccessEnvelope:
+      type: object
+      properties:
+        data: {}
+        meta: {}
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+    RegisterRequest:
+      type: object
+      required: [password]
+      properties:
+        email: { type: string, format: email }
+        phone: { type: string }
+        password: { type: string, minLength: 8 }
+        first_name: { type: string }
+        last_name: { type: string }
+        role: { type: string, enum: [CUSTOMER, PROFESSIONAL] }
+    LoginRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier: { type: string, description: Email or phone number }
+        password: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+    VerifyPhoneRequest:
+      type: object
+      required: [phone, code]
+      properties:
+        phone: { type: string }
+        code: { type: string }
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  service: { type: string }
+  /ready:
+    get:
+      tags: [system]
+      summary: Readiness probe
+      responses:
+        '200':
+          description: All dependencies reachable
+        '503':
+          description: A dependency is down
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      user: { $ref: '#/components/schemas/User' }
+                      tokens: { $ref: '#/components/schemas/TokenPair' }
+        '409':
+          $ref: '#/components/responses/Error'
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in with email/phone and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Logged in
+        '401':
+          $ref: '#/components/responses/Error'
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate a refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: New token pair
+        '401':
+          $ref: '#/components/responses/Error'
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the current refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '204':
+          description: Revoked
+  /api/v1/auth/verify-phone:
+    post:
+      tags: [auth]
+      summary: Verify a phone number with an OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyPhoneRequest' }
+      responses:
+        '200':
+          description: Phone verified
+  /api/v1/auth/resend-otp:
+    post:
+      tags: [auth]
+      summary: Request a fresh OTP for a phone number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone: { type: string }
+      responses:
+        '200':
+          description: OTP sent
+components:
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }

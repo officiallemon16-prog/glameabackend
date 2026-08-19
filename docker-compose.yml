@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  tidb:
+    image: pingcap/tidb:v8.5.0
+    container_name: glamea-tidb
+    ports:
+      - "4000:4000"
+    environment:
+      - TZ=UTC
+    volumes:
+      - tidb_data:/tmp/tidb
+    command: ["--store=unistore"]
+
+  mongodb:
+    image: mongo:7
+    container_name: glamea-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - TZ=UTC
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: glamea-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+volumes:
+  tidb_data:
+  mongo_data:
+  redis_data:
