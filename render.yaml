@@ -38,7 +38,7 @@ services:
       - key: SEERBIT_BASE_URL
         value: https://seerbitapi.com/api/v2
       - key: APP_URL
-        sync: false
+        value: https://glamea-backend.onrender.com
       - key: PLATFORM_FEE_PERCENT
         value: "8.0"
       - key: DEFAULT_CURRENCY
