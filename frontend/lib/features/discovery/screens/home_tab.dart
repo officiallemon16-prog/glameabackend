@@ -59,6 +59,17 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final feed = ref.watch(feedControllerProvider);
     final categories = ref.watch(categoriesProvider).valueOrNull ?? const <Category>[];
 
+    // Scroll the feed back to the latest post when the home icon is re-tapped.
+    ref.listen(homeScrollToTopProvider, (_, __) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+
     return SafeArea(
       child: Column(
         children: [

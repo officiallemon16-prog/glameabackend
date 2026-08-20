@@ -24,6 +24,7 @@ class ProfileApi {
     String? firstName,
     String? lastName,
     String? email,
+    String? avatarMediaId,
   }) {
     return _guard(() async {
       final res = await _dio.patch<Map<String, dynamic>>(
@@ -32,6 +33,7 @@ class ProfileApi {
           if (firstName != null) 'first_name': firstName,
           if (lastName != null) 'last_name': lastName,
           if (email != null) 'email': email,
+          if (avatarMediaId != null) 'avatar_media_id': avatarMediaId,
         },
       );
       final data = _data(res.data);

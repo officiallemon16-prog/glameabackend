@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/widgets/app_back_handler.dart';
 import 'screens/pro_account_tab.dart';
 import 'screens/pro_availability_tab.dart';
 import 'screens/pro_bookings_tab.dart';
@@ -19,8 +20,9 @@ class _ProShellState extends State<ProShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
+    return AppBackHandler(
+      child: Scaffold(
+        body: IndexedStack(
         index: _index,
         children: const [
           ProDashboardTab(),
@@ -46,6 +48,7 @@ class _ProShellState extends State<ProShell> {
           NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'Account'),
         ],
       ),
-    );
+    ),
+  );
   }
 }

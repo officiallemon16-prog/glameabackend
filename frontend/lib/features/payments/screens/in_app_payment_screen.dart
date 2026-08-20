@@ -223,8 +223,24 @@ class _CheckoutViewState extends ConsumerState<_CheckoutView> {
     final url = widget.intent.authorizationUrl;
     if (url != null && url.isNotEmpty) {
       final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
+      // Open inside the app (in-app WebView) instead of spawning a separate
+      // browser app, which many OEMs/ROMs block. Fall back to the platform
+      // default only if the in-app view can't launch.
+      try {
+        final ok = await launchUrl(
+          uri,
+          mode: LaunchMode.inAppWebView,
+          webOnlyWindowName: '_blank',
+        );
+        if (!ok && await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
+        }
+      } catch (_) {
+        if (await canLaunchUrl(uri)) {
+          try {
+            await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
+          } catch (_) {}
+        }
       }
     }
 

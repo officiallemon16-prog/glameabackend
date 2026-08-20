@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/errors/app_exception.dart';
 import '../../core/network/realtime_client.dart';
+import '../../features/auth/auth_controller.dart';
 import '../../models/conversation.dart';
 import '../../models/message.dart';
 import 'data/messaging_api.dart';
@@ -26,7 +27,12 @@ class ConversationsState {
   final List<Conversation> conversations;
   final String? error;
 
-  int get unreadTotal => conversations.fold(0, (sum, c) => sum + c.unreadCount);
+  /// Total unread, excluding threads where the current user sent the last
+  /// message (the backend can report an unread count for a conversation the
+  /// user just wrote in, which must not show as a "new message" badge).
+  int unreadTotal(String userId) => conversations
+      .where((c) => c.lastMessageSenderId != userId)
+      .fold(0, (sum, c) => sum + c.unreadCount);
 }
 
 /// Loads the user's conversations and keeps them fresh with light polling.
@@ -38,12 +44,12 @@ class ConversationsController extends Notifier<ConversationsState> {
 
   @override
   ConversationsState build() {
-    _load();
     _timer = Timer.periodic(_pollInterval, (_) => _load(silent: true));
     ref.onDispose(() {
       _disposed = true;
       _timer?.cancel();
     });
+    Future.microtask(_load);
     return const ConversationsState(status: ConversationsStatus.loading);
   }
 
@@ -91,11 +97,12 @@ final conversationsControllerProvider =
 class UnreadController extends Notifier<int> {
   @override
   int build() {
+    final userId = ref.watch(authControllerProvider).user?.id ?? '';
     ref.listen<ConversationsState>(conversationsControllerProvider, (_, next) {
-      final total = next.unreadTotal;
+      final total = next.unreadTotal(userId);
       if (total != state) state = total;
     });
-    return ref.read(conversationsControllerProvider).unreadTotal;
+    return ref.read(conversationsControllerProvider).unreadTotal(userId);
   }
 
   Future<void> refresh() async {

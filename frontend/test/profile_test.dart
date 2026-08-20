@@ -46,7 +46,13 @@ class FakeProfileApi extends ProfileApi {
   Future<User> fetchMe() async => profileUser;
 
   @override
-  Future<User> updateProfile({String? firstName, String? lastName, String? email}) async {
+  Future<User> updateProfile({
+    String? firstName,
+    String? lastName,
+    String? email,
+    String? avatarMediaId,
+    String? avatarUrl,
+  }) async {
     lastFirstName = firstName;
     lastLastName = lastName;
     lastEmail = email;

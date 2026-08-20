@@ -63,7 +63,9 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
 		if origin == "" {
-			return false
+			// Native clients (Flutter/dart:io WebSocket) send no Origin header.
+			// Auth is via the ?token= query param, so allow them through.
+			return true
 		}
 		return allowedOrigins[origin]
 	},

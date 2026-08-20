@@ -166,6 +166,7 @@ class _ConversationList extends ConsumerWidget {
         return _ConversationTile(
           conversation: conversation,
           otherName: otherName,
+          userId: userId,
           onTap: () async {
             await context.push(AppRoutes.chatFor(conversation.bookingId));
             ref.read(conversationsControllerProvider.notifier).refresh();
@@ -180,18 +181,21 @@ class _ConversationTile extends StatelessWidget {
   const _ConversationTile({
     required this.conversation,
     required this.otherName,
+    required this.userId,
     required this.onTap,
   });
 
   final Conversation conversation;
   final String otherName;
+  final String userId;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final lastMessageAt = conversation.lastMessageAt;
     final hasPreview = conversation.lastMessage.isNotEmpty;
-    final isUnread = conversation.unreadCount > 0;
+    final isUnread =
+        conversation.unreadCount > 0 && conversation.lastMessageSenderId != userId;
     final unreadLabel = conversation.unreadCount > 99 ? '99+' : '${conversation.unreadCount}';
     final subtitle = [
       if (conversation.serviceName.isNotEmpty) conversation.serviceName,

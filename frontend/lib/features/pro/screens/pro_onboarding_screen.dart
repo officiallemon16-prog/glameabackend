@@ -78,15 +78,15 @@ class _ProOnboardingScreenState extends ConsumerState<ProOnboardingScreen> {
 
   bool _canProceed() {
     switch (_step) {
-      case 0:
-        return _businessName.text.trim().isNotEmpty && _selectedCategoryId != null;
       case 1:
-        return _city.text.trim().isNotEmpty;
+        return _businessName.text.trim().isNotEmpty && _selectedCategoryId != null;
       case 2:
+        return _city.text.trim().isNotEmpty;
+      case 3:
         return _services.any(
           (s) => s.name.text.trim().isNotEmpty && s.price.text.trim().isNotEmpty,
         );
-      case 3:
+      case 4:
         return _availability.isNotEmpty;
       default:
         return true;
@@ -135,9 +135,10 @@ class _ProOnboardingScreenState extends ConsumerState<ProOnboardingScreen> {
         _availability.forEach((day, slot) {
           if (slot.open != null && slot.close != null) {
             windows.add({
-              'day_of_week': day,
-              'start_time': slot.open!,
-              'end_time': slot.close!,
+              // Backend uses 0=Sunday..6=Saturday; the picker is 0=Monday..6=Sunday.
+              'day_of_week': (day + 1) % 7,
+              'start_minutes': _toMinutes(slot.open!),
+              'end_minutes': _toMinutes(slot.close!),
             });
           }
         });
@@ -1088,4 +1089,11 @@ class _DoneStep extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Parses a "HH:MM" time string into minutes since midnight.
+int _toMinutes(String time) {
+  final parts = time.split(':');
+  if (parts.length < 2) return 0;
+  return (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
 }

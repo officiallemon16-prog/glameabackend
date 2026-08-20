@@ -58,24 +58,34 @@ class _GlameaAppState extends ConsumerState<GlameaApp> {
       // Renders the offline banner above the navigator without overlapping
       // screen content (the app pushes down instead).
       builder: (context, child) {
-        return Column(
-          children: [
-            const OfflineBanner(),
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  child ?? const SizedBox.shrink(),
-                  // Foreground push banner pinned to the top of the content.
-                  const Align(
-                    alignment: Alignment.topCenter,
-                    child: ForegroundNotificationBanner(),
-                  ),
-                  const CallOverlay(),
-                ],
+        // Responsive text scaling: keep typography comfortable across device
+        // sizes (small phones get slightly smaller text, large ones a bit
+        // larger) without touching the const theme tokens.
+        final width = MediaQuery.of(context).size.width;
+        final scale = (width / 375).clamp(0.85, 1.12);
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+          ),
+          child: Column(
+            children: [
+              const OfflineBanner(),
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    child ?? const SizedBox.shrink(),
+                    // Foreground push banner pinned to the top of the content.
+                    const Align(
+                      alignment: Alignment.topCenter,
+                      child: ForegroundNotificationBanner(),
+                    ),
+                    const CallOverlay(),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

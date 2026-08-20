@@ -24,19 +24,26 @@ class ProListState<T> {
 
 /// Loads a pro-owned list from [load] and exposes refresh + mutation hooks.
 class ProListController<T> extends Notifier<ProListState<T>> {
+  bool _disposed = false;
+
   @override
   ProListState<T> build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return ProListState<T>(status: ProListStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final items = await load();
+      if (_disposed) return;
       state = ProListState<T>(status: ProListStatus.ready, items: items);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProListState<T>(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = ProListState<T>(
         status: ProListStatus.error,
         error: 'Could not load. Please try again.',
@@ -47,6 +54,7 @@ class ProListController<T> extends Notifier<ProListState<T>> {
   Future<List<T>> load() async => const [];
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = ProListState<T>(status: ProListStatus.loading);
     await _load();
   }
@@ -65,44 +73,55 @@ class ProProfileState {
 }
 
 class ProProfileController extends Notifier<ProProfileState> {
+  bool _disposed = false;
+
   @override
   ProProfileState build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProProfileState();
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final profile = await ref.read(proApiProvider).fetchMyProfile();
+      if (_disposed) return;
       state = ProProfileState(status: ProListStatus.ready, profile: profile);
     } on ApiException catch (e) {
       // No professional record yet: surface the "set up your studio" state
       // instead of an error so a freshly registered pro can onboard.
+      if (_disposed) return;
       if (e.code == 'professional_not_found') {
         state = const ProProfileState(status: ProListStatus.ready);
         return;
       }
       state = ProProfileState(status: ProListStatus.error, error: e.message);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProProfileState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProProfileState(status: ProListStatus.error, error: 'Could not load your profile.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProProfileState();
     await _load();
   }
 
   Future<void> create(Map<String, dynamic> payload) async {
     final profile = await ref.read(proApiProvider).createMyProfile(payload);
+    if (_disposed) return;
     state = ProProfileState(status: ProListStatus.ready, profile: profile);
   }
 
   Future<void> update(Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final profile = await api.updateMyProfile(payload);
+    if (_disposed) return;
     state = ProProfileState(status: ProListStatus.ready, profile: profile);
   }
 }
@@ -115,24 +134,32 @@ final proProfileControllerProvider =
 // ---------------------------------------------------------------------------
 
 class ProBookingsController extends Notifier<ProListState<Booking>> {
+  bool _disposed = false;
+
   @override
   ProListState<Booking> build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProListState<Booking>(status: ProListStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final items = await ref.read(proApiProvider).fetchProBookings();
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.ready, items: items);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProListState(status: ProListStatus.error, error: 'Could not load your bookings.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProListState(status: ProListStatus.loading);
     await _load();
   }
@@ -145,6 +172,7 @@ class ProBookingsController extends Notifier<ProListState<Booking>> {
       'complete' => await api.completeBooking(booking.id),
       _ => booking,
     };
+    if (_disposed) return;
     state = ProListState(
       status: ProListStatus.ready,
       items: [for (final b in state.items) b.id == updated.id ? updated : b],
@@ -160,24 +188,32 @@ final proBookingsControllerProvider =
 // ---------------------------------------------------------------------------
 
 class ProServicesController extends Notifier<ProListState<BeautyService>> {
+  bool _disposed = false;
+
   @override
   ProListState<BeautyService> build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProListState<BeautyService>(status: ProListStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final items = await ref.read(proApiProvider).fetchMyServices();
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.ready, items: items);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProListState(status: ProListStatus.error, error: 'Could not load your services.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProListState(status: ProListStatus.loading);
     await _load();
   }
@@ -185,6 +221,7 @@ class ProServicesController extends Notifier<ProListState<BeautyService>> {
   Future<void> create(Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final created = await api.createService(payload);
+    if (_disposed) return;
     state = ProListState(
       status: ProListStatus.ready,
       items: [created, ...state.items],
@@ -194,6 +231,7 @@ class ProServicesController extends Notifier<ProListState<BeautyService>> {
   Future<void> update(String id, Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final updated = await api.updateService(id, payload);
+    if (_disposed) return;
     state = ProListState(
       status: ProListStatus.ready,
       items: [for (final s in state.items) s.id == id ? updated : s],
@@ -203,6 +241,7 @@ class ProServicesController extends Notifier<ProListState<BeautyService>> {
   Future<void> remove(String id) async {
     final api = ref.read(proApiProvider);
     await api.deleteService(id);
+    if (_disposed) return;
     state = ProListState(
       status: ProListStatus.ready,
       items: [for (final s in state.items) if (s.id != id) s],
@@ -232,30 +271,38 @@ class ProAvailabilityState {
 }
 
 class ProAvailabilityController extends Notifier<ProAvailabilityState> {
+  bool _disposed = false;
+
   @override
   ProAvailabilityState build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProAvailabilityState();
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final api = ref.read(proApiProvider);
       final windows = await api.fetchWindows();
       final exceptions = await api.fetchExceptions();
+      if (_disposed) return;
       state = ProAvailabilityState(
         status: ProListStatus.ready,
         windows: windows,
         exceptions: exceptions,
       );
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProAvailabilityState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProAvailabilityState(status: ProListStatus.error, error: 'Could not load availability.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProAvailabilityState();
     await _load();
   }
@@ -263,6 +310,7 @@ class ProAvailabilityController extends Notifier<ProAvailabilityState> {
   Future<void> saveWindows(List<Map<String, dynamic>> windows) async {
     final api = ref.read(proApiProvider);
     final saved = await api.saveWindows(windows);
+    if (_disposed) return;
     state = ProAvailabilityState(
       status: ProListStatus.ready,
       windows: saved,
@@ -310,6 +358,7 @@ class ProAvailabilityController extends Notifier<ProAvailabilityState> {
   Future<void> addException(Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final created = await api.addException(payload);
+    if (_disposed) return;
     state = ProAvailabilityState(
       status: ProListStatus.ready,
       windows: state.windows,
@@ -320,6 +369,7 @@ class ProAvailabilityController extends Notifier<ProAvailabilityState> {
   Future<void> removeException(String id) async {
     final api = ref.read(proApiProvider);
     await api.deleteException(id);
+    if (_disposed) return;
     state = ProAvailabilityState(
       status: ProListStatus.ready,
       windows: state.windows,
@@ -336,24 +386,32 @@ final proAvailabilityControllerProvider =
 // ---------------------------------------------------------------------------
 
 class ProPortfolioController extends Notifier<ProListState<PortfolioItem>> {
+  bool _disposed = false;
+
   @override
   ProListState<PortfolioItem> build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProListState<PortfolioItem>(status: ProListStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final items = await ref.read(proApiProvider).fetchMyPortfolio();
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.ready, items: items);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProListState(status: ProListStatus.error, error: 'Could not load your portfolio.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProListState(status: ProListStatus.loading);
     await _load();
   }
@@ -361,12 +419,14 @@ class ProPortfolioController extends Notifier<ProListState<PortfolioItem>> {
   Future<void> create(Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final created = await api.createPortfolioItem(payload);
+    if (_disposed) return;
     state = ProListState(status: ProListStatus.ready, items: [created, ...state.items]);
   }
 
   Future<void> update(String id, Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final updated = await api.updatePortfolioItem(id, payload);
+    if (_disposed) return;
     state = ProListState(
       status: ProListStatus.ready,
       items: [for (final p in state.items) p.id == id ? updated : p],
@@ -376,6 +436,7 @@ class ProPortfolioController extends Notifier<ProListState<PortfolioItem>> {
   Future<void> remove(String id) async {
     final api = ref.read(proApiProvider);
     await api.deletePortfolioItem(id);
+    if (_disposed) return;
     state = ProListState(
       status: ProListStatus.ready,
       items: [for (final p in state.items) if (p.id != id) p],
@@ -391,24 +452,32 @@ final proPortfolioControllerProvider =
 // ---------------------------------------------------------------------------
 
 class ProDealsController extends Notifier<ProListState<Deal>> {
+  bool _disposed = false;
+
   @override
   ProListState<Deal> build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProListState<Deal>(status: ProListStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final items = await ref.read(proApiProvider).fetchMyDeals();
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.ready, items: items);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProListState(status: ProListStatus.error, error: 'Could not load your deals.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProListState(status: ProListStatus.loading);
     await _load();
   }
@@ -416,12 +485,14 @@ class ProDealsController extends Notifier<ProListState<Deal>> {
   Future<void> create(Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final created = await api.createDeal(payload);
+    if (_disposed) return;
     state = ProListState(status: ProListStatus.ready, items: [created, ...state.items]);
   }
 
   Future<void> toggle(String id, bool active) async {
     final api = ref.read(proApiProvider);
     await api.updateDeal(id, {'is_active': active});
+    if (_disposed) return;
     state = ProListState(
       status: ProListStatus.ready,
       items: [for (final d in state.items) d.id == id ? _withActive(d, active) : d],
@@ -449,24 +520,32 @@ final proDealsControllerProvider =
 // ---------------------------------------------------------------------------
 
 class ProReviewsController extends Notifier<ProListState<Review>> {
+  bool _disposed = false;
+
   @override
   ProListState<Review> build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProListState<Review>(status: ProListStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final items = await ref.read(proApiProvider).fetchProReviews();
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.ready, items: items);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProListState(status: ProListStatus.error, error: 'Could not load reviews.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProListState(status: ProListStatus.loading);
     await _load();
   }
@@ -474,6 +553,7 @@ class ProReviewsController extends Notifier<ProListState<Review>> {
   Future<void> respond(String id, String response) async {
     final api = ref.read(proApiProvider);
     final updated = await api.respondToReview(id, response);
+    if (_disposed) return;
     state = ProListState(
       status: ProListStatus.ready,
       items: [for (final r in state.items) r.id == id ? updated : r],
@@ -489,24 +569,32 @@ final proReviewsControllerProvider =
 // ---------------------------------------------------------------------------
 
 class ProVerificationController extends Notifier<ProListState<VerificationDocument>> {
+  bool _disposed = false;
+
   @override
   ProListState<VerificationDocument> build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProListState<VerificationDocument>(status: ProListStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final items = await ref.read(proApiProvider).fetchVerificationDocs();
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.ready, items: items);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProListState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProListState(status: ProListStatus.error, error: 'Could not load verification documents.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProListState(status: ProListStatus.loading);
     await _load();
   }
@@ -514,6 +602,7 @@ class ProVerificationController extends Notifier<ProListState<VerificationDocume
   Future<void> submit(Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final created = await api.submitVerificationDoc(payload);
+    if (_disposed) return;
     state = ProListState(status: ProListStatus.ready, items: [created, ...state.items]);
   }
 }
@@ -543,18 +632,23 @@ class ProPayoutsState {
 }
 
 class ProPayoutsController extends Notifier<ProPayoutsState> {
+  bool _disposed = false;
+
   @override
   ProPayoutsState build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProPayoutsState();
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final api = ref.read(proApiProvider);
       final balance = await api.fetchBalance();
       final accounts = await api.fetchAccounts();
       final requests = await api.fetchPayoutRequests();
+      if (_disposed) return;
       state = ProPayoutsState(
         status: ProListStatus.ready,
         balance: balance,
@@ -562,13 +656,16 @@ class ProPayoutsController extends Notifier<ProPayoutsState> {
         requests: requests,
       );
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProPayoutsState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProPayoutsState(status: ProListStatus.error, error: 'Could not load payouts.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProPayoutsState();
     await _load();
   }
@@ -576,6 +673,7 @@ class ProPayoutsController extends Notifier<ProPayoutsState> {
   Future<void> addAccount(Map<String, dynamic> payload) async {
     final api = ref.read(proApiProvider);
     final created = await api.addAccount(payload);
+    if (_disposed) return;
     state = ProPayoutsState(
       status: ProListStatus.ready,
       balance: state.balance,
@@ -587,6 +685,7 @@ class ProPayoutsController extends Notifier<ProPayoutsState> {
   Future<void> setDefault(String id) async {
     final api = ref.read(proApiProvider);
     await api.setDefaultAccount(id);
+    if (_disposed) return;
     state = ProPayoutsState(
       status: ProListStatus.ready,
       balance: state.balance,
@@ -610,6 +709,7 @@ class ProPayoutsController extends Notifier<ProPayoutsState> {
   Future<void> removeAccount(String id) async {
     final api = ref.read(proApiProvider);
     await api.deleteAccount(id);
+    if (_disposed) return;
     state = ProPayoutsState(
       status: ProListStatus.ready,
       balance: state.balance,
@@ -621,6 +721,7 @@ class ProPayoutsController extends Notifier<ProPayoutsState> {
   Future<Payout> request({required double amount, String? accountId, String note = ''}) async {
     final api = ref.read(proApiProvider);
     final created = await api.requestPayout(amount: amount, accountId: accountId, note: note);
+    if (_disposed) return created;
     state = ProPayoutsState(
       status: ProListStatus.ready,
       balance: state.balance,
@@ -652,31 +753,40 @@ class ProEarningsState {
 
 /// Loads the pro-facing earnings snapshot shown on the studio dashboard.
 class ProEarningsController extends Notifier<ProEarningsState> {
+  bool _disposed = false;
+
   @override
   ProEarningsState build() {
-    _load();
+    ref.onDispose(() => _disposed = true);
+    Future.microtask(_load);
     return const ProEarningsState();
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final earnings = await ref.read(proApiProvider).fetchEarnings();
+      if (_disposed) return;
       state = ProEarningsState(status: ProListStatus.ready, earnings: earnings);
     } on ApiException catch (e) {
       // No professional record yet: show an empty snapshot instead of an error.
+      if (_disposed) return;
       if (e.code == 'professional_profile_required') {
         state = const ProEarningsState(status: ProListStatus.ready);
         return;
       }
       state = ProEarningsState(status: ProListStatus.error, error: e.message);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProEarningsState(status: ProListStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProEarningsState(status: ProListStatus.error, error: 'Could not load earnings.');
     }
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     state = const ProEarningsState();
     await _load();
   }

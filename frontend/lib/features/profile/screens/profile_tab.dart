@@ -206,14 +206,20 @@ class _HeaderCard extends StatelessWidget {
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          AppAvatar(name: name, radius: 32),
+          AppAvatar(name: name, url: user?.avatarUrl, radius: 36),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.headline2),
+                // Resize the name to fit instead of clipping it with an ellipsis.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(name, style: AppTextStyles.headline2, maxLines: 1),
+                ),
                 if (user?.phone?.isNotEmpty == true) ...[
                   const SizedBox(height: AppSpacing.xxs),
                   Text(

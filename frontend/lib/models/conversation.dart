@@ -16,6 +16,7 @@ class Conversation {
     this.serviceName = '',
     this.professionalAvatarUrl = '',
     this.customerAvatarUrl = '',
+    this.lastMessageSenderId = '',
     this.unreadCount = 0,
   });
 
@@ -35,6 +36,7 @@ class Conversation {
       serviceName: json['service_name'] as String? ?? '',
       professionalAvatarUrl: json['professional_avatar_url'] as String? ?? '',
       customerAvatarUrl: json['customer_avatar_url'] as String? ?? '',
+      lastMessageSenderId: json['last_message_sender_id'] as String? ?? '',
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
     );
   }
@@ -56,6 +58,7 @@ class Conversation {
   final String serviceName;
   final String professionalAvatarUrl;
   final String customerAvatarUrl;
+  final String lastMessageSenderId;
   final int unreadCount;
 
   /// Name of the party that is not the given user.

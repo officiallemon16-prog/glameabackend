@@ -8,7 +8,7 @@ import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
-import '../../../core/google_auth/google_auth_web.dart';
+import '../../../core/google_auth/google_auth.dart';
 import '../../../shared/widgets/widgets.dart';
 import '../auth_controller.dart';
 
@@ -89,25 +89,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor: AppColors.surface,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.sm),
                 IconButton(
                   onPressed: () => context.go(AppRoutes.onboarding),
                   icon: const Icon(Icons.arrow_back, color: AppColors.primary),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                const Text('Welcome back', style: AppTextStyles.display),
+                const SizedBox(height: AppSpacing.sm),
+                const Text('Welcome back', style: AppTextStyles.headline1),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Log in to continue your beauty journey.',
                   style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
                 ),
-                const SizedBox(height: AppSpacing.xl),
+                const SizedBox(height: AppSpacing.lg),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -122,9 +122,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     label: const Text('Continue with Google'),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
                 const _DividerWithText(label: 'or log in with email'),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
                 AppTextField(
                   controller: _identifier,
                   hintText: 'Email or phone number',
@@ -134,7 +134,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   validator: (v) => v == null || v.trim().isEmpty ? 'Enter your email or phone' : null,
                   prefixIcon: const Icon(Icons.person_outline, color: AppColors.textMuted),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.sm),
                 AppTextField(
                   controller: _password,
                   hintText: 'Password',
@@ -150,12 +150,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
                 if (auth.error != null) ...[
-                  const SizedBox(height: AppSpacing.md),
+                  const SizedBox(height: AppSpacing.sm),
                   _ErrorBanner(message: auth.error!),
                 ],
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
                 AppButton(label: 'Log in', loading: loading, onPressed: loading ? null : _submit),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
+import '../../features/auth/auth_controller.dart';
 import '../deeplinks/deep_link_controller.dart';
 import 'notification_links.dart';
 import 'notification_service.dart';
@@ -32,6 +33,11 @@ class _ForegroundNotificationBannerState
     final service = ref.read(notificationServiceProvider);
     _sub = service.foregroundMessages.listen((data) {
       if (!mounted) return;
+      // Never surface a banner for a message the current user sent themselves
+      // (the backend can echo the sender's own message back as a push).
+      final myId = ref.read(authControllerProvider).user?.id ?? '';
+      final senderId = data['sender_id'] ?? data['senderId'] ?? '';
+      if (myId.isNotEmpty && senderId.isNotEmpty && senderId == myId) return;
       _dismissTimer?.cancel();
       setState(() => _current = data);
       _dismissTimer = Timer(const Duration(seconds: 6), () {

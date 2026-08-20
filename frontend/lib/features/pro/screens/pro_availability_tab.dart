@@ -115,7 +115,6 @@ class _ProAvailabilityTabState extends ConsumerState<ProAvailabilityTab> {
             'day_of_week': w.dayOfWeek,
             'start_minutes': w.startMinutes,
             'end_minutes': w.endMinutes,
-            'is_active': w.isActive,
           },
       ];
       await ref.read(proAvailabilityControllerProvider.notifier).saveWindows(windows);

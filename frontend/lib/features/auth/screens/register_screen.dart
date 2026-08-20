@@ -8,7 +8,7 @@ import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
-import '../../../core/google_auth/google_auth_web.dart';
+import '../../../core/google_auth/google_auth.dart';
 import '../../../shared/widgets/widgets.dart';
 import '../auth_controller.dart';
 
@@ -97,25 +97,25 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       backgroundColor: AppColors.surface,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.sm),
                 IconButton(
                   onPressed: () => context.go(AppRoutes.onboarding),
                   icon: const Icon(Icons.arrow_back, color: AppColors.primary),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                const Text('Create your account', style: AppTextStyles.display),
+                const SizedBox(height: AppSpacing.sm),
+                const Text('Create your account', style: AppTextStyles.headline1),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Join Glamea and book trusted beauty professionals.',
                   style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
                 ),
-                const SizedBox(height: AppSpacing.xl),
+                const SizedBox(height: AppSpacing.lg),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -130,9 +130,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     label: const Text('Continue with Google'),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
                 const _DividerWithText(label: 'or sign up with email'),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     Expanded(
@@ -154,7 +154,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.sm),
                 AppTextField(
                   controller: _email,
                   hintText: 'Email address',
@@ -169,7 +169,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   },
                   prefixIcon: const Icon(Icons.mail_outline, color: AppColors.textMuted),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.sm),
                 AppTextField(
                   controller: _phone,
                   hintText: 'Phone number (optional)',
@@ -178,7 +178,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   autofillHints: const [AutofillHints.telephoneNumber],
                   prefixIcon: const Icon(Icons.phone_outlined, color: AppColors.textMuted),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.sm),
                 AppTextField(
                   controller: _password,
                   hintText: 'Password (min. 8 characters)',
@@ -194,7 +194,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ),
                 ),
                 if (auth.error != null) ...[
-                  const SizedBox(height: AppSpacing.md),
+                  const SizedBox(height: AppSpacing.sm),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(AppSpacing.md),
@@ -206,9 +206,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     child: Text(auth.error!, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.error)),
                   ),
                 ],
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
                 AppButton(label: 'Create account', loading: loading, onPressed: loading ? null : _submit),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.sm),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

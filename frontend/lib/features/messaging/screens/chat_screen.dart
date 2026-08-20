@@ -42,6 +42,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _input = TextEditingController();
   final List<_PendingImage> _pendingImages = [];
   bool _showEmoji = false;
+  bool _showAttach = false;
 
   @override
   void dispose() {
@@ -89,7 +90,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               )
             : null,
         title: conversation == null ? 'Messages' : null,
-        actions: conversation != null
+        actions: (conversation != null && state.messages.isNotEmpty)
             ? [
                 _CallButton(
                   icon: Icons.call_rounded,
@@ -132,7 +133,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               controller: _input,
               pendingImages: _pendingImages,
               showEmoji: _showEmoji,
+              showAttach: _showAttach,
               onToggleEmoji: () => setState(() => _showEmoji = !_showEmoji),
+              onToggleAttach: () => setState(() => _showAttach = !_showAttach),
               onSend: _send,
               onSendLocation: _sendLocation,
               onPickImage: _pickImage,
@@ -963,7 +966,9 @@ class _Composer extends StatelessWidget {
     required this.controller,
     required this.pendingImages,
     required this.showEmoji,
+    required this.showAttach,
     required this.onToggleEmoji,
+    required this.onToggleAttach,
     required this.onSend,
     required this.onSendLocation,
     required this.onPickImage,
@@ -973,7 +978,9 @@ class _Composer extends StatelessWidget {
   final TextEditingController controller;
   final List<_PendingImage> pendingImages;
   final bool showEmoji;
+  final bool showAttach;
   final VoidCallback onToggleEmoji;
+  final VoidCallback onToggleAttach;
   final VoidCallback onSend;
   final VoidCallback onSendLocation;
   final VoidCallback onPickImage;
@@ -1047,6 +1054,25 @@ class _Composer extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.xs),
             ],
+            if (showAttach)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                child: Row(
+                  children: [
+                    _AttachAction(
+                      icon: Icons.photo_camera_outlined,
+                      label: 'Photo',
+                      onTap: onPickImage,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    _AttachAction(
+                      icon: Icons.location_on_outlined,
+                      label: 'Location',
+                      onTap: onSendLocation,
+                    ),
+                  ],
+                ),
+              ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -1079,23 +1105,10 @@ class _Composer extends StatelessWidget {
                 SizedBox(
                   height: 44,
                   child: IconButton(
-                    onPressed: onPickImage,
-                    tooltip: 'Add image',
+                    onPressed: onToggleAttach,
+                    tooltip: 'Attach',
                     icon: Icon(
-                      Icons.photo_camera_outlined,
-                      color: pendingImages.isNotEmpty
-                          ? AppColors.primary
-                          : AppColors.roseGold,
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  height: 44,
-                  child: IconButton(
-                    onPressed: onSendLocation,
-                    tooltip: 'Share location',
-                    icon: const Icon(
-                      Icons.location_on_outlined,
+                      showAttach ? Icons.close : Icons.add,
                       color: AppColors.primary,
                     ),
                   ),
@@ -1115,6 +1128,48 @@ class _Composer extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AttachAction extends StatelessWidget {
+  const _AttachAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.softGrey,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                label,
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textPrimary),
+              ),
+            ],
+          ),
         ),
       ),
     );

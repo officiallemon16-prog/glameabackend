@@ -46,6 +46,7 @@ class BookingFlowScreen extends ConsumerWidget {
             builder: (_) => _PaymentSheet(
               bookingId: created.id,
               booking: created,
+              onSuccess: () => controller.markPaymentHandled(),
             ),
           );
         },
@@ -686,6 +687,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet>
     with SingleTickerProviderStateMixin {
   late final PaymentFlowArgs _flowArgs;
   bool _launched = false;
+  bool _celebrated = false;
   late final ConfettiController _confettiController;
   late final AnimationController _scaleController;
   late final Animation<double> _scaleAnimation;
@@ -720,8 +722,24 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet>
     if (_launched) return;
     _launched = true;
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
+    // Open inside the app (in-app WebView) instead of spawning a separate
+    // browser app, which many OEMs/ROMs block or silently drop. Fall back to
+    // the platform default only if the in-app view can't launch.
+    try {
+      final ok = await launchUrl(
+        uri,
+        mode: LaunchMode.inAppWebView,
+        webOnlyWindowName: '_blank',
+      );
+      if (!ok && await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
+      }
+    } catch (_) {
+      if (await canLaunchUrl(uri)) {
+        try {
+          await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
+        } catch (_) {}
+      }
     }
     ref.read(paymentFlowProvider(_flowArgs).notifier).startPolling(intervalSeconds: 4, maxTries: 30);
   }
@@ -731,9 +749,15 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet>
     final flow = ref.watch(paymentFlowProvider(_flowArgs));
     final intent = flow.intent;
 
-    if (flow.status == PaymentFlowStatus.succeeded && !_scaleController.isAnimating) {
-      _confettiController.play();
-      _scaleController.forward();
+    if (flow.status == PaymentFlowStatus.succeeded && !_celebrated) {
+      _celebrated = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _confettiController.play();
+          _scaleController.forward();
+          widget.onSuccess?.call();
+        }
+      });
     }
 
     final hasAuthUrl = intent?.authorizationUrl != null && intent!.authorizationUrl!.isNotEmpty;

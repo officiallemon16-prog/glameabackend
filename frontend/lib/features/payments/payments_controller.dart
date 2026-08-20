@@ -169,21 +169,34 @@ class WalletState {
 
 /// Loads the wallet balance and transaction history.
 class WalletController extends Notifier<WalletState> {
+  bool _disposed = false;
+
   @override
   WalletState build() {
+    ref.onDispose(() => _disposed = true);
     _load();
     return const WalletState(status: WalletStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final api = ref.read(paymentApiProvider);
       final results = await Future.wait([
         api.fetchWallet(),
         api.fetchTransactions(),
       ]);
-      final wallet = results[0] as PaymentWallet;
-      final tx = results[1] as ({List<LedgerEntry> items, int total});
+      if (_disposed) return;
+      final wallet = results[0] as PaymentWallet? ??
+          const PaymentWallet(userId: '', currency: 'NGN', balance: 0);
+      final tx = results[1] as ({List<LedgerEntry> items, int total})?;
+      if (tx == null) {
+        state = const WalletState(
+          status: WalletStatus.error,
+          error: 'Could not load your wallet. Please try again.',
+        );
+        return;
+      }
       state = WalletState(
         status: WalletStatus.ready,
         wallet: wallet,
@@ -191,8 +204,10 @@ class WalletController extends Notifier<WalletState> {
         total: tx.total,
       );
     } on AppException catch (e) {
+      if (_disposed) return;
       state = WalletState(status: WalletStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const WalletState(
         status: WalletStatus.error,
         error: 'Could not load your wallet. Please try again.',
@@ -201,6 +216,7 @@ class WalletController extends Notifier<WalletState> {
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     if (state.wallet == null) {
       state = const WalletState(status: WalletStatus.loading);
     }

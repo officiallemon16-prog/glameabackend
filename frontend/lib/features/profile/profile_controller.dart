@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/cache/avatar_cache.dart';
 import '../../core/errors/app_exception.dart';
 import '../../features/auth/auth_controller.dart';
 import '../../models/notification_item.dart';
@@ -22,19 +23,29 @@ class ProfileState {
 
 /// Loads the current user's profile and keeps the session in sync on edit.
 class ProfileController extends Notifier<ProfileState> {
+  bool _disposed = false;
+
   @override
   ProfileState build() {
+    ref.onDispose(() => _disposed = true);
     _load();
     return const ProfileState(status: ProfileStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final user = await ref.read(profileApiProvider).fetchMe();
-      state = ProfileState(status: ProfileStatus.ready, user: user);
+      if (_disposed) return;
+      // Apply the locally cached profile picture (backend only returns the id).
+      final cached = await getCachedAvatar(user.id);
+      final display = cached != null ? user.copyWith(avatarUrl: cached) : user;
+      state = ProfileState(status: ProfileStatus.ready, user: display);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = ProfileState(status: ProfileStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const ProfileState(
         status: ProfileStatus.error,
         error: 'Could not load your profile. Please try again.',
@@ -50,14 +61,24 @@ class ProfileController extends Notifier<ProfileState> {
     String? firstName,
     String? lastName,
     String? email,
+    String? avatarMediaId,
+    String? avatarUrl,
   }) async {
     final user = await ref.read(profileApiProvider).updateProfile(
           firstName: firstName,
           lastName: lastName,
           email: email,
+          avatarMediaId: avatarMediaId,
         );
-    await ref.read(authControllerProvider.notifier).updateUser(user);
-    state = ProfileState(status: ProfileStatus.ready, user: user);
+    if (_disposed) return;
+    final merged = user.copyWith(
+      avatarUrl: avatarUrl ?? user.avatarUrl,
+      avatarMediaId: avatarMediaId ?? user.avatarMediaId,
+    );
+    if (avatarUrl != null) await cacheAvatar(merged.id, avatarUrl);
+    await ref.read(authControllerProvider.notifier).updateUser(merged);
+    if (_disposed) return;
+    state = ProfileState(status: ProfileStatus.ready, user: merged);
   }
 }
 
@@ -105,17 +126,22 @@ class NotificationsState {
 
 /// Loads the user's notifications + unread count and supports read actions.
 class NotificationsController extends Notifier<NotificationsState> {
+  bool _disposed = false;
+
   @override
   NotificationsState build() {
+    ref.onDispose(() => _disposed = true);
     _load();
     return const NotificationsState(status: NotificationsStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final api = ref.read(profileApiProvider);
       final result = await api.fetchNotifications();
       final unread = await api.unreadCount();
+      if (_disposed) return;
       state = NotificationsState(
         status: NotificationsStatus.ready,
         items: result.items,
@@ -123,8 +149,10 @@ class NotificationsController extends Notifier<NotificationsState> {
         unreadCount: unread,
       );
     } on AppException catch (e) {
+      if (_disposed) return;
       state = NotificationsState(status: NotificationsStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const NotificationsState(
         status: NotificationsStatus.error,
         error: 'Could not load notifications. Please try again.',
@@ -140,6 +168,7 @@ class NotificationsController extends Notifier<NotificationsState> {
     } catch (_) {
       return;
     }
+    if (_disposed) return;
     state = state.copyWith(
       unreadCount: state.unreadCount > 0 ? state.unreadCount - 1 : 0,
       items: [
@@ -155,6 +184,7 @@ class NotificationsController extends Notifier<NotificationsState> {
     } catch (_) {
       return;
     }
+    if (_disposed) return;
     state = state.copyWith(
       unreadCount: 0,
       items: [for (final item in state.items) item.copyWith(isRead: true)],

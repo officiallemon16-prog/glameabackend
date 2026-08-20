@@ -5,6 +5,10 @@ import '../../models/category.dart';
 import '../../models/feed_post.dart';
 import 'data/discovery_api.dart';
 
+/// Signals the home feed to scroll back to the top (latest post) when the home
+/// nav icon is tapped while already on the home tab.
+final homeScrollToTopProvider = StateProvider<int>((ref) => 0);
+
 enum FeedStatus { loading, ready, loadingMore, refreshing, error }
 
 class FeedState {

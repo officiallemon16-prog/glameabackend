@@ -121,9 +121,11 @@ class BookingFlowState {
 class BookingFlowController extends FamilyNotifier<BookingFlowState, BookingFlowArgs> {
   int _slotRequestId = 0;
   bool _idempotencyInitialised = false;
+  bool _disposed = false;
 
   @override
   BookingFlowState build(BookingFlowArgs arg) {
+    ref.onDispose(() => _disposed = true);
     if (!_idempotencyInitialised) {
       _idempotencyInitialised = true;
       state = BookingFlowState(
@@ -132,7 +134,6 @@ class BookingFlowController extends FamilyNotifier<BookingFlowState, BookingFlow
         idempotencyKey: _newIdempotencyKey(),
       );
     }
-    ref.onDispose(() {});
     return state;
   }
 
@@ -178,6 +179,7 @@ class BookingFlowController extends FamilyNotifier<BookingFlowState, BookingFlow
   }
 
   Future<void> _loadSlots(DateTime date) async {
+    if (_disposed) return;
     final id = ++_slotRequestId;
     try {
       final slots = await ref.read(bookingApiProvider).fetchSlots(
@@ -185,13 +187,13 @@ class BookingFlowController extends FamilyNotifier<BookingFlowState, BookingFlow
             date: date,
             durationMinutes: state.service.durationMinutes,
           );
-      if (id != _slotRequestId) return;
+      if (_disposed || id != _slotRequestId) return;
       state = state.copyWith(slotStatus: SlotLoadStatus.ready, slots: slots);
     } on AppException catch (e) {
-      if (id != _slotRequestId) return;
+      if (_disposed || id != _slotRequestId) return;
       state = state.copyWith(slotStatus: SlotLoadStatus.error, slotError: e.message);
     } catch (_) {
-      if (id != _slotRequestId) return;
+      if (_disposed || id != _slotRequestId) return;
       state = state.copyWith(
         slotStatus: SlotLoadStatus.error,
         slotError: 'Could not load available times. Please try again.',
@@ -200,6 +202,7 @@ class BookingFlowController extends FamilyNotifier<BookingFlowState, BookingFlow
   }
 
   Future<void> submit() async {
+    if (_disposed) return;
     final current = state;
     final start = current.selectedStart;
     if (start == null || current.submitting) return;
@@ -214,10 +217,13 @@ class BookingFlowController extends FamilyNotifier<BookingFlowState, BookingFlow
             customerNotes: current.notes,
             idempotencyKey: current.idempotencyKey,
           );
+      if (_disposed) return;
       state = state.copyWith(submitting: false, createdBooking: booking);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = state.copyWith(submitting: false, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = state.copyWith(
         submitting: false,
         error: 'Could not complete your booking. Please try again.',
@@ -249,19 +255,26 @@ class MyBookingsState {
 
 /// Loads the customer's bookings and exposes refresh.
 class MyBookingsController extends Notifier<MyBookingsState> {
+  bool _disposed = false;
+
   @override
   MyBookingsState build() {
+    ref.onDispose(() => _disposed = true);
     _load();
     return const MyBookingsState(status: MyBookingsStatus.loading);
   }
 
   Future<void> _load() async {
+    if (_disposed) return;
     try {
       final bookings = await ref.read(bookingApiProvider).fetchMyBookings();
+      if (_disposed) return;
       state = MyBookingsState(status: MyBookingsStatus.ready, bookings: bookings);
     } on AppException catch (e) {
+      if (_disposed) return;
       state = MyBookingsState(status: MyBookingsStatus.error, error: e.message);
     } catch (_) {
+      if (_disposed) return;
       state = const MyBookingsState(
         status: MyBookingsStatus.error,
         error: 'Could not load your bookings. Please try again.',
@@ -270,6 +283,7 @@ class MyBookingsController extends Notifier<MyBookingsState> {
   }
 
   Future<void> refresh() async {
+    if (_disposed) return;
     if (state.bookings.isEmpty) {
       state = const MyBookingsState(status: MyBookingsStatus.loading);
     }
