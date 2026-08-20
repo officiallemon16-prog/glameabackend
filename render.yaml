@@ -53,3 +53,5 @@ services:
         value: 24h
       - key: PAYOUT_HOLDING_PERIOD
         value: 168h
+      - key: EMAIL_FROM
+        value: "Glamea <no-reply@nder.beauty>"
