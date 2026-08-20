@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"math"
 	"sort"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/glamea/glamea-backend/internal/availability"
 	"github.com/glamea/glamea-backend/internal/professionals"
 	"github.com/glamea/glamea-backend/internal/services"
+	"github.com/glamea/glamea-backend/internal/users"
+	"github.com/glamea/glamea-backend/pkg/email"
 	"github.com/glamea/glamea-backend/pkg/httpx"
 	"github.com/redis/go-redis/v9"
 )
@@ -25,6 +28,9 @@ type Service struct {
 	buffer       time.Duration
 	travelTime   time.Duration
 	hooks        *Hooks
+	emailer      email.Emailer
+	userStore    *users.Store
+	logger       *slog.Logger
 }
 
 type Options struct {
@@ -44,6 +50,16 @@ func (s *Service) SetHooks(h *Hooks) {
 	s.hooks = h
 }
 
+// SetEmailer wires the transactional email sender for booking emails.
+func (s *Service) SetEmailer(e email.Emailer) {
+	s.emailer = e
+}
+
+// SetUserStore wires the user store used to resolve email addresses.
+func (s *Service) SetUserStore(u *users.Store) {
+	s.userStore = u
+}
+
 func (s *Service) fire(hook func(ctx context.Context, b *Booking) error, b *Booking) {
 	if s.hooks == nil || hook == nil {
 		return
@@ -52,7 +68,7 @@ func (s *Service) fire(hook func(ctx context.Context, b *Booking) error, b *Book
 }
 
 func NewService(store *Store, proStore *professionals.Store, serviceStore *services.Store,
-	availStore *availability.Store, rdb *redis.Client, slotLockTTL time.Duration, opts Options) *Service {
+	availStore *availability.Store, rdb *redis.Client, slotLockTTL time.Duration, opts Options, logger *slog.Logger) *Service {
 	return &Service{
 		store:        store,
 		proStore:     proStore,
@@ -62,6 +78,7 @@ func NewService(store *Store, proStore *professionals.Store, serviceStore *servi
 		slotLockTTL:  slotLockTTL,
 		buffer:       opts.Buffer,
 		travelTime:   opts.TravelTime,
+		logger:       logger,
 	}
 }
 
@@ -292,7 +309,33 @@ func (s *Service) Confirm(ctx context.Context, userID, bookingID string) (*Booki
 		return nil, err
 	}
 	s.fire(s.hooks.OnConfirmed, updated)
+	s.sendConfirmationEmails(ctx, updated)
 	return updated, nil
+}
+
+// sendConfirmationEmails notifies the customer and professional of a confirmed
+// booking. Failures are logged but never block the confirmation.
+func (s *Service) sendConfirmationEmails(ctx context.Context, b *Booking) {
+	if s.emailer == nil || s.userStore == nil {
+		return
+	}
+	when := b.StartAt.Format("Mon 2 Jan 2006, 15:04")
+	loc := b.LocationAddress
+	if loc == "" {
+		loc = "To be confirmed"
+	}
+	if cust, err := s.userStore.GetByID(ctx, b.CustomerID); err == nil && cust.Email != nil && *cust.Email != "" {
+		if err := s.emailer.SendBookingConfirmed(*cust.Email, cust.FirstName, b.ProfessionalName, b.ServiceName, when, loc); err != nil {
+			s.logger.Error("booking confirm email failed", "email", *cust.Email, "error", err)
+		}
+	}
+	if pro, err := s.proStore.GetByID(ctx, b.ProfessionalID); err == nil && pro.UserID != "" {
+		if pu, err := s.userStore.GetByID(ctx, pro.UserID); err == nil && pu.Email != nil && *pu.Email != "" {
+			if err := s.emailer.SendBookingConfirmed(*pu.Email, pu.FirstName, b.CustomerName, b.ServiceName, when, loc); err != nil {
+				s.logger.Error("pro booking confirm email failed", "email", *pu.Email, "error", err)
+			}
+		}
+	}
 }
 
 func (s *Service) Start(ctx context.Context, userID, bookingID string) (*Booking, error) {

@@ -89,11 +89,13 @@ func main() {
 	sessionStore := auth.NewSessionStore(db)
 	tokenManager := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	authService := auth.NewService(userStore, sessionStore, rdb, tokenManager, cfg, logger)
+	var resendSender *email.ResendSender
 	if cfg.ResendAPIKey != "" {
-		resendSender := email.NewResendSender(cfg.ResendAPIKey, cfg.EmailFrom)
+		resendSender = email.NewResendSender(cfg.ResendAPIKey, cfg.EmailFrom)
 		authService.SetEmailDelivery(func(ctx context.Context, to, code string) error {
 			return resendSender.SendOTP(to, code)
 		})
+		authService.SetEmailer(resendSender)
 		logger.Info("Resend email sender configured")
 	} else {
 		logger.Warn("RESEND_API_KEY not set, email verification codes will only be logged")
@@ -157,8 +159,10 @@ func main() {
 
 	bookingStore := bookings.NewStore(db)
 	bookingService := bookings.NewService(bookingStore, professionalStore, serviceStore, availabilityStore, rdb,
-		cfg.BookingSlotLockTTL, bookings.Options{Buffer: cfg.BookingBuffer, TravelTime: cfg.TravelTime})
+		cfg.BookingSlotLockTTL, bookings.Options{Buffer: cfg.BookingBuffer, TravelTime: cfg.TravelTime}, logger)
 	bookingHandler := bookings.NewHandler(bookingService, authMiddleware)
+	bookingService.SetEmailer(resendSender)
+	bookingService.SetUserStore(userStore)
 
 	notificationStore := notifications.NewStore(db)
 	var notificationPusher notifications.Pusher
@@ -343,6 +347,8 @@ func main() {
 	}
 
 	jobScheduler := jobs.New(jobs.NewStore(db), bookingStore, notificationService, cfg, logger)
+	jobScheduler.SetEmailer(resendSender)
+	jobScheduler.SetUserStore(userStore)
 	jobCtx, stopJobs := context.WithCancel(ctx)
 	var jobsWG sync.WaitGroup
 	jobsWG.Add(1)

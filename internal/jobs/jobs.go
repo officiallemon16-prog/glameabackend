@@ -8,7 +8,9 @@ import (
 
 	"github.com/glamea/glamea-backend/internal/bookings"
 	"github.com/glamea/glamea-backend/internal/notifications"
+	"github.com/glamea/glamea-backend/internal/users"
 	"github.com/glamea/glamea-backend/pkg/config"
+	"github.com/glamea/glamea-backend/pkg/email"
 )
 
 // Scheduler runs periodic background jobs. It is safe to start from main and is
@@ -19,10 +21,22 @@ type Scheduler struct {
 	notifier     *notifications.Service
 	cfg          *config.Config
 	logger       *slog.Logger
+	emailer      email.Emailer
+	userStore    *users.Store
 }
 
 func New(store *Store, bookingStore *bookings.Store, notifier *notifications.Service, cfg *config.Config, logger *slog.Logger) *Scheduler {
 	return &Scheduler{store: store, bookingStore: bookingStore, notifier: notifier, cfg: cfg, logger: logger}
+}
+
+// SetEmailer wires the transactional email sender for reminder/review emails.
+func (s *Scheduler) SetEmailer(e email.Emailer) {
+	s.emailer = e
+}
+
+// SetUserStore wires the user store used to resolve email addresses.
+func (s *Scheduler) SetUserStore(u *users.Store) {
+	s.userStore = u
 }
 
 // Run executes all jobs immediately, then on every configured interval until ctx
@@ -110,6 +124,20 @@ func (s *Scheduler) SendBookingReminders(ctx context.Context) error {
 			_ = s.notifier.Notify(ctx, b.ProUserID, "booking", "Upcoming appointment",
 				"Reminder: you have an appointment at "+when+".", map[string]any{"booking_id": b.ID})
 		}
+		if s.emailer != nil && s.userStore != nil && b.CustomerID != "" {
+			if full, err := s.bookingStore.GetByID(ctx, b.ID); err == nil {
+				if c, err := s.userStore.GetByID(ctx, b.CustomerID); err == nil && c.Email != nil && *c.Email != "" {
+					if e := s.emailer.SendBookingReminder(*c.Email, c.FirstName, when, full.ProfessionalName, full.ServiceName); e != nil {
+						s.logger.Error("booking reminder email failed", "email", *c.Email, "error", e)
+					}
+				}
+				if p, err := s.userStore.GetByID(ctx, b.ProUserID); err == nil && p.Email != nil && *p.Email != "" {
+					if e := s.emailer.SendBookingReminder(*p.Email, p.FirstName, when, full.CustomerName, full.ServiceName); e != nil {
+						s.logger.Error("pro booking reminder email failed", "email", *p.Email, "error", e)
+					}
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -132,6 +160,15 @@ func (s *Scheduler) SendReviewReminders(ctx context.Context) error {
 		_ = s.notifier.Notify(ctx, b.CustomerID, "review", "How was your appointment?",
 			"You haven't reviewed your recent appointment yet. Your feedback helps others.",
 			map[string]any{"booking_id": b.ID})
+		if s.emailer != nil && s.userStore != nil {
+			if full, err := s.bookingStore.GetByID(ctx, b.ID); err == nil {
+				if c, err := s.userStore.GetByID(ctx, b.CustomerID); err == nil && c.Email != nil && *c.Email != "" {
+					if e := s.emailer.SendReviewRequest(*c.Email, c.FirstName, full.ProfessionalName, full.ServiceName); e != nil {
+						s.logger.Error("review email failed", "email", *c.Email, "error", e)
+					}
+				}
+			}
+		}
 	}
 	return nil
 }

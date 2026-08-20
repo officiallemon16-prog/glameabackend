@@ -15,6 +15,7 @@ import (
 
 	"github.com/glamea/glamea-backend/internal/users"
 	"github.com/glamea/glamea-backend/pkg/config"
+	"github.com/glamea/glamea-backend/pkg/email"
 	"github.com/glamea/glamea-backend/pkg/httpx"
 	"github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
@@ -42,6 +43,7 @@ type Service struct {
 	logger        *slog.Logger
 	sendOTP       func(ctx context.Context, phone, code string) error
 	sendEmailCode func(ctx context.Context, email, code string) error
+	emailer      email.Emailer
 }
 
 func NewService(
@@ -71,6 +73,11 @@ func (svc *Service) SetOTPSender(fn func(ctx context.Context, phone, code string
 
 func (svc *Service) SetEmailSender(fn func(ctx context.Context, email, code string) error) {
 	svc.sendEmailCode = fn
+}
+
+// SetEmailer wires the transactional email sender used for welcome emails.
+func (svc *Service) SetEmailer(e email.Emailer) {
+	svc.emailer = e
 }
 
 // SetEmailDelivery wraps the default code generation/storage with a custom
@@ -172,6 +179,12 @@ func (svc *Service) Register(ctx context.Context, in RegisterInput, ip string) (
 	if email != "" {
 		if err := svc.sendEmailCode(ctx, email, ""); err != nil {
 			svc.logger.Error("send email verification on register", "error", err, "user_id", created.ID)
+		}
+	}
+
+	if svc.emailer != nil && created.Email != nil && *created.Email != "" {
+		if err := svc.emailer.SendWelcome(*created.Email, created.FirstName); err != nil {
+			svc.logger.Error("send welcome email", "error", err, "user_id", created.ID)
 		}
 	}
 
