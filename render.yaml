@@ -46,7 +46,7 @@ services:
       - key: FCM_PROJECT_ID
         sync: false
       - key: FCM_SERVICE_ACCOUNT_FILE
-        value: ""
+        sync: false
       - key: BOOKING_SLOT_LOCK_TTL
         value: 10m
       - key: IDEMPOTENCY_KEY_TTL
