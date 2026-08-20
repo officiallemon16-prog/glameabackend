@@ -90,7 +90,7 @@ func main() {
 	tokenManager := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	authService := auth.NewService(userStore, sessionStore, rdb, tokenManager, cfg, logger)
 	if cfg.ResendAPIKey != "" {
-		resendSender := email.NewResendSender(cfg.ResendAPIKey, "")
+		resendSender := email.NewResendSender(cfg.ResendAPIKey, cfg.EmailFrom)
 		authService.SetEmailDelivery(func(ctx context.Context, to, code string) error {
 			return resendSender.SendOTP(to, code)
 		})

@@ -83,6 +83,7 @@ type Config struct {
 
 	// Resend email API
 	ResendAPIKey string `env:"RESEND_API_KEY"`
+	EmailFrom    string `env:"EMAIL_FROM"`
 
 	// WebRTC TURN relay for reliable voice/video calls behind NATs. When blank
 	// clients fall back to STUN only (best-effort on symmetric NATs).
