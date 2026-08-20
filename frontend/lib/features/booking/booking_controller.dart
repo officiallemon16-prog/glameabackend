@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/errors/app_exception.dart';
@@ -255,11 +257,16 @@ class MyBookingsState {
 
 /// Loads the customer's bookings and exposes refresh.
 class MyBookingsController extends Notifier<MyBookingsState> {
+  Timer? _timer;
   bool _disposed = false;
 
   @override
   MyBookingsState build() {
-    ref.onDispose(() => _disposed = true);
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _load());
+    ref.onDispose(() {
+      _disposed = true;
+      _timer?.cancel();
+    });
     _load();
     return const MyBookingsState(status: MyBookingsStatus.loading);
   }

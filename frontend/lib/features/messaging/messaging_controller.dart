@@ -37,17 +37,26 @@ class ConversationsState {
 
 /// Loads the user's conversations and keeps them fresh with light polling.
 class ConversationsController extends Notifier<ConversationsState> {
-  static const _pollInterval = Duration(seconds: 30);
+  static const _pollInterval = Duration(seconds: 3);
 
   Timer? _timer;
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
   bool _disposed = false;
 
   @override
   ConversationsState build() {
     _timer = Timer.periodic(_pollInterval, (_) => _load(silent: true));
+    final client = ref.read(realtimeClientProvider);
+    client.start().catchError((Object _) {});
+    _realtimeSub = client.events.listen((event) {
+      if (_disposed) return;
+      if (event.op != 'message') return;
+      _load(silent: true);
+    }, onError: (Object _) {});
     ref.onDispose(() {
       _disposed = true;
       _timer?.cancel();
+      _realtimeSub?.cancel();
     });
     Future.microtask(_load);
     return const ConversationsState(status: ConversationsStatus.loading);
@@ -130,6 +139,7 @@ class MessagesState {
     this.sendError,
     this.hasMore = false,
     this.loadingMore = false,
+    this.otherTyping = false,
   });
 
   final MessagesStatus status;
@@ -140,6 +150,7 @@ class MessagesState {
   final String? sendError;
   final bool hasMore;
   final bool loadingMore;
+  final bool otherTyping;
 
   MessagesState copyWith({
     MessagesStatus? status,
@@ -151,6 +162,7 @@ class MessagesState {
     String? sendError,
     bool? hasMore,
     bool? loadingMore,
+    bool? otherTyping,
   }) {
     return MessagesState(
       status: status ?? this.status,
@@ -161,6 +173,7 @@ class MessagesState {
       sendError: sendError ?? this.sendError,
       hasMore: hasMore ?? this.hasMore,
       loadingMore: loadingMore ?? this.loadingMore,
+      otherTyping: otherTyping ?? this.otherTyping,
     );
   }
 }
@@ -168,10 +181,11 @@ class MessagesState {
 /// Drives a chat screen for a booking: initial load, send, mark-read and
 /// realtime delivery over websocket (HTTP polling as a fallback).
 class MessagesController extends FamilyNotifier<MessagesState, String> {
-  static const _pollInterval = Duration(seconds: 8);
+  static const _pollInterval = Duration(seconds: 3);
   static const _pageSize = 50;
 
   Timer? _pollTimer;
+  Timer? _typingClearTimer;
   StreamSubscription<RealtimeEvent>? _realtimeSub;
   bool _disposed = false;
 
@@ -235,6 +249,17 @@ class MessagesController extends FamilyNotifier<MessagesState, String> {
     client.start().catchError((Object _) {});
     _realtimeSub = client.events.listen((event) {
       if (_disposed) return;
+      if (event.op == 'typing') {
+        final isTyping = (event.payload['is_typing'] as bool? ?? false);
+        _typingClearTimer?.cancel();
+        state = state.copyWith(otherTyping: isTyping);
+        if (isTyping) {
+          _typingClearTimer = Timer(const Duration(seconds: 4), () {
+            if (!_disposed) state = state.copyWith(otherTyping: false);
+          });
+        }
+        return;
+      }
       if (event.op != 'message') return;
       final msg = Message.fromJson(event.payload);
       final conversationId = state.conversation?.id;

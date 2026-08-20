@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../app/router/app_router.dart';
 import '../../../app/theme/app_colors.dart';
@@ -718,30 +718,25 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet>
     await ref.read(paymentFlowProvider(_flowArgs).notifier).start();
   }
 
-  Future<void> _openCheckout(String url) async {
+  void _openCheckout(String url) {
     if (_launched) return;
     _launched = true;
-    final uri = Uri.parse(url);
-    // Open inside the app (in-app WebView) instead of spawning a separate
-    // browser app, which many OEMs/ROMs block or silently drop. Fall back to
-    // the platform default only if the in-app view can't launch.
-    try {
-      final ok = await launchUrl(
-        uri,
-        mode: LaunchMode.inAppWebView,
-        webOnlyWindowName: '_blank',
-      );
-      if (!ok && await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
-      }
-    } catch (_) {
-      if (await canLaunchUrl(uri)) {
-        try {
-          await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
-        } catch (_) {}
-      }
-    }
-    ref.read(paymentFlowProvider(_flowArgs).notifier).startPolling(intervalSeconds: 4, maxTries: 30);
+    // Open the gateway page in an in-app WebView (full screen) instead of
+    // spawning a separate browser app, which many OEMs/ROMs block or silently
+    // drop - that was leaving the sheet stuck on a spinner.
+    ref.read(paymentFlowProvider(_flowArgs).notifier).startPolling(
+          intervalSeconds: 3,
+          maxTries: 40,
+        );
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _EmbeddedCheckoutScreen(
+          flowArgs: _flowArgs,
+          url: url,
+        ),
+      ),
+    );
   }
 
   @override
@@ -919,13 +914,13 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet>
           const CircularProgressIndicator(color: AppColors.primary),
           const SizedBox(height: AppSpacing.lg),
           Text(
-            'A payment page has opened in your browser.',
+            'A payment page is open.',
             style: AppTextStyles.title.copyWith(color: AppColors.textPrimary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Complete your payment there, then come back here.\nThis page will update automatically.',
+            'Complete your payment in the page that opened.\nThis page updates automatically once it succeeds.',
             textAlign: TextAlign.center,
             style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
           ),
@@ -945,12 +940,130 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet>
             },
           ),
         ],
-        const SizedBox(height: AppSpacing.md),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          const SizedBox(height: AppSpacing.md),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Embedded checkout — full-screen in-app WebView for the gateway page. Watches
+// the flow and returns to the sheet once the backend marks it terminal.
+// ---------------------------------------------------------------------------
+
+class _EmbeddedCheckoutScreen extends ConsumerStatefulWidget {
+  const _EmbeddedCheckoutScreen({required this.flowArgs, required this.url});
+
+  final PaymentFlowArgs flowArgs;
+  final String url;
+
+  @override
+  ConsumerState<_EmbeddedCheckoutScreen> createState() => _EmbeddedCheckoutScreenState();
+}
+
+class _EmbeddedCheckoutScreenState extends ConsumerState<_EmbeddedCheckoutScreen> {
+  late final WebViewController _controller;
+  bool _verifying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (request) {
+            if (_looksLikeSuccess(request.url)) _markVerifying();
+            return NavigationDecision.navigate;
+          },
+          onPageFinished: (url) {
+            if (_looksLikeSuccess(url)) _markVerifying();
+          },
         ),
-      ],
+      )
+      ..loadRequest(Uri.parse(widget.url));
+
+    // Once the backend marks the intent terminal we return to the sheet,
+    // which then celebrates (success) or shows the error.
+    ref.listenManual(paymentFlowProvider(widget.flowArgs), (previous, next) {
+      if (!mounted) return;
+      if (next.status == PaymentFlowStatus.succeeded) {
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (mounted) Navigator.of(context).pop();
+        });
+      } else if (next.status == PaymentFlowStatus.failed) {
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (mounted) Navigator.of(context).pop();
+        });
+      }
+    });
+  }
+
+  bool _looksLikeSuccess(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('glamea://') ||
+        lower.contains('status=success') ||
+        lower.contains('status=complete') ||
+        lower.contains('&paid=') ||
+        lower.contains('tx_ref=') ||
+        lower.contains('trxref=') ||
+        lower.contains('/callback') ||
+        lower.contains('/return');
+  }
+
+  void _markVerifying() {
+    if (!mounted) return;
+    setState(() => _verifying = true);
+    ref.read(paymentFlowProvider(widget.flowArgs).notifier).checkStatus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: GlameaAppBar(
+        title: 'Complete payment',
+        showBack: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Close',
+            onPressed: () {
+              ref.read(paymentFlowProvider(widget.flowArgs).notifier).checkStatus();
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_verifying)
+            Container(
+              color: Colors.black45,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: AppColors.primary),
+                      SizedBox(height: AppSpacing.md),
+                      Text('Verifying your payment…'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

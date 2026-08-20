@@ -113,6 +113,9 @@ class PaymentFlowController extends FamilyNotifier<PaymentFlowState, PaymentFlow
           return;
         }
       }
+      // Guaranteed final check so a lapsed poll window never leaves the UI
+      // stuck on a spinner forever.
+      if (!_disposed) await checkStatus();
     } finally {
       _polling = false;
     }

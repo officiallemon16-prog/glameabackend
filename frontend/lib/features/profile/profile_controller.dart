@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cache/avatar_cache.dart';
@@ -126,11 +128,16 @@ class NotificationsState {
 
 /// Loads the user's notifications + unread count and supports read actions.
 class NotificationsController extends Notifier<NotificationsState> {
+  Timer? _timer;
   bool _disposed = false;
 
   @override
   NotificationsState build() {
-    ref.onDispose(() => _disposed = true);
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _load());
+    ref.onDispose(() {
+      _disposed = true;
+      _timer?.cancel();
+    });
     _load();
     return const NotificationsState(status: NotificationsStatus.loading);
   }

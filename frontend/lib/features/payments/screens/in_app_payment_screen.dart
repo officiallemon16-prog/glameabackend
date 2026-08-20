@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../models/payment.dart';
 import '../../../shared/widgets/app_bar.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../payments_controller.dart';
@@ -195,56 +196,65 @@ class _ProcessingView extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Checkout — opens payment URL in browser, polls for status.
+// Checkout — embeds the gateway page in an in-app WebView and polls for status.
 // ---------------------------------------------------------------------------
 
 class _CheckoutView extends ConsumerStatefulWidget {
   const _CheckoutView({required this.args, required this.intent});
   final PaymentFlowArgs args;
-  final dynamic intent;
+  final PaymentIntent intent;
 
   @override
   ConsumerState<_CheckoutView> createState() => _CheckoutViewState();
 }
 
 class _CheckoutViewState extends ConsumerState<_CheckoutView> {
-  bool _launched = false;
+  late final WebViewController _controller;
+  bool _verifying = false;
 
   @override
   void initState() {
     super.initState();
-    _openCheckout();
+    final url = widget.intent.authorizationUrl ?? '';
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (request) {
+            if (_looksLikeSuccess(request.url)) _markVerifying();
+            return NavigationDecision.navigate;
+          },
+          onPageFinished: (url) {
+            if (_looksLikeSuccess(url)) _markVerifying();
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(url));
+
+    // Keep polling so the UI flips to success/error as soon as the backend
+    // marks the intent terminal - even if the gateway's redirect isn't caught.
+    ref.read(paymentFlowProvider(widget.args).notifier).startPolling(
+          intervalSeconds: 3,
+          maxTries: 40,
+        );
   }
 
-  Future<void> _openCheckout() async {
-    if (_launched) return;
-    _launched = true;
+  bool _looksLikeSuccess(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('glamea://') ||
+        lower.contains('status=success') ||
+        lower.contains('status=complete') ||
+        lower.contains('&paid=') ||
+        lower.contains('tx_ref=') ||
+        lower.contains('trxref=') ||
+        lower.contains('/callback') ||
+        lower.contains('/return');
+  }
 
-    final url = widget.intent.authorizationUrl;
-    if (url != null && url.isNotEmpty) {
-      final uri = Uri.parse(url);
-      // Open inside the app (in-app WebView) instead of spawning a separate
-      // browser app, which many OEMs/ROMs block. Fall back to the platform
-      // default only if the in-app view can't launch.
-      try {
-        final ok = await launchUrl(
-          uri,
-          mode: LaunchMode.inAppWebView,
-          webOnlyWindowName: '_blank',
-        );
-        if (!ok && await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
-        }
-      } catch (_) {
-        if (await canLaunchUrl(uri)) {
-          try {
-            await launchUrl(uri, mode: LaunchMode.platformDefault, webOnlyWindowName: '_blank');
-          } catch (_) {}
-        }
-      }
-    }
-
-    ref.read(paymentFlowProvider(widget.args).notifier).startPolling(intervalSeconds: 4, maxTries: 30);
+  void _markVerifying() {
+    if (!mounted) return;
+    setState(() => _verifying = true);
+    ref.read(paymentFlowProvider(widget.args).notifier).checkStatus();
   }
 
   @override
@@ -263,43 +273,41 @@ class _CheckoutViewState extends ConsumerState<_CheckoutView> {
                 ),
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.close),
+            tooltip: 'Close',
+            onPressed: () {
+              ref.read(paymentFlowProvider(widget.args).notifier).checkStatus();
+              Navigator.of(context).pop(false);
+            },
+          ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: AppColors.primary),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'A payment page has opened in your browser.',
-                style: AppTextStyles.title.copyWith(color: AppColors.textPrimary),
-                textAlign: TextAlign.center,
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_verifying)
+            Container(
+              color: Colors.black45,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: AppColors.primary),
+                      SizedBox(height: AppSpacing.md),
+                      Text('Verifying your payment…'),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Complete your payment there, then come back here.\nThis page will update automatically.',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              AppButton(
-                label: 'I completed payment',
-                icon: Icons.check_circle_outline_rounded,
-                onPressed: () {
-                  ref.read(paymentFlowProvider(widget.args).notifier).checkStatus();
-                },
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
     );
   }

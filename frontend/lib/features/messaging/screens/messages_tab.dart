@@ -212,7 +212,7 @@ class _ConversationTile extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.md),
           child: Row(
             children: [
-              AppAvatar(name: otherName, radius: 24),
+              AppAvatar(name: otherName, url: conversation.otherAvatarUrl(userId), radius: 24),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(

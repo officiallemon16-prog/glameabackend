@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/network/realtime_client.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../features/auth/auth_controller.dart';
 import '../../../features/location/location_map_screen.dart';
@@ -44,8 +47,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _showEmoji = false;
   bool _showAttach = false;
 
+  Timer? _typingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _input.addListener(_onInputChanged);
+  }
+
+  void _onInputChanged() {
+    setState(() {});
+    _notifyTyping();
+  }
+
+  void _notifyTyping() {
+    final userId = ref.read(authControllerProvider).user?.id ?? '';
+    final conversation =
+        ref.read(messagesControllerProvider(widget.bookingId)).conversation;
+    if (userId.isEmpty || conversation == null) return;
+    final otherId = conversation.otherId(userId);
+    if (otherId.isEmpty) return;
+    final rt = ref.read(realtimeClientProvider);
+    rt.send({
+      'op': 'typing',
+      'to_user_id': otherId,
+      'data': {'is_typing': true},
+    });
+    _typingTimer?.cancel();
+    _typingTimer = Timer(const Duration(seconds: 2), () {
+      rt.send({
+        'op': 'typing',
+        'to_user_id': otherId,
+        'data': {'is_typing': false},
+      });
+    });
+  }
+
   @override
   void dispose() {
+    _typingTimer?.cancel();
+    _input.removeListener(_onInputChanged);
     _input.dispose();
     super.dispose();
   }
@@ -128,6 +169,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
             },
           ),
+          if (state.status == MessagesStatus.ready && state.otherTyping)
+            Padding(
+              padding:
+                  const EdgeInsets.only(left: 16, right: 16, bottom: 2, top: 4),
+              child: Row(
+                children: [
+                  const _TypingDots(),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${state.conversation?.otherName(userId) ?? 'Someone'} is typing…',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
           if (state.status == MessagesStatus.ready)
             _Composer(
               controller: _input,
@@ -181,7 +238,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (text.isNotEmpty) {
       _input.clear();
-      controller.send(text, senderId: userId);
+      _typingTimer?.cancel();
+      final conversation =
+          ref.read(messagesControllerProvider(widget.bookingId)).conversation;
+      final otherId = conversation?.otherId(userId) ?? '';
+      if (otherId.isNotEmpty) {
+        ref.read(realtimeClientProvider).send({
+          'op': 'typing',
+          'to_user_id': otherId,
+          'data': {'is_typing': false},
+        });
+      }
+      final ok = await controller.send(text, senderId: userId);
+      if (ok && mounted) {
+        try {
+          await SystemSound.play(SystemSoundType.click);
+        } catch (_) {}
+      }
     }
 
     if (_pendingImages.isNotEmpty) {
@@ -635,25 +708,19 @@ class _MessageBubble extends StatelessWidget {
               ),
               if (isMine) ...[
                 const SizedBox(width: 3),
-                if (message.pending)
-                  const SizedBox(
-                    width: 11,
-                    height: 11,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      color: Colors.white70,
-                    ),
-                  )
-                else
-                  Icon(
-                    message.isRead
-                        ? Icons.done_all_rounded
-                        : Icons.done_rounded,
-                    size: 13,
-                    color: message.isRead
-                        ? AppColors.white.withValues(alpha: 0.85)
-                        : timeColor,
-                  ),
+                Icon(
+                  message.pending
+                      ? Icons.schedule_rounded
+                      : (message.isRead
+                          ? Icons.done_all_rounded
+                          : Icons.done_rounded),
+                  size: 13,
+                  color: message.pending
+                      ? Colors.white70
+                      : (message.isRead
+                          ? AppColors.white.withValues(alpha: 0.85)
+                          : timeColor),
+                ),
               ],
             ],
           ),
@@ -1114,17 +1181,20 @@ class _Composer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.xs),
-                SizedBox(
-                  height: 44,
-                  child: IconButton.filled(
-                    onPressed: onSend,
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.white,
+                if (controller.text.isNotEmpty || pendingImages.isNotEmpty)
+                  SizedBox(
+                    height: 44,
+                    child: IconButton.filled(
+                      onPressed: onSend,
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.white,
+                      ),
+                      icon: const Icon(Icons.send_rounded, size: 20),
                     ),
-                    icon: const Icon(Icons.send_rounded, size: 20),
-                  ),
-                ),
+                  )
+                else
+                  const SizedBox(width: 44, height: 44),
               ],
             ),
           ],
@@ -1173,6 +1243,51 @@ class _AttachAction extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(3, (i) {
+          final delay = i * 0.2;
+          final value = CurvedAnimation(
+            parent: _controller,
+            curve: Interval(delay, delay + 0.6, curve: Curves.easeInOut),
+          );
+          return FadeTransition(
+            opacity: value,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 1.5),
+              width: 5,
+              height: 5,
+              decoration: const BoxDecoration(
+                color: AppColors.textSecondary,
+                shape: BoxShape.circle,
+              ),
+            ),
+          );
+        }),
+      );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 }
 

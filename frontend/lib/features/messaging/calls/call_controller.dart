@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:uuid/uuid.dart';
@@ -7,8 +10,45 @@ import 'package:uuid/uuid.dart';
 import '../../../core/network/realtime_client.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../../models/message.dart';
-import '../../auth/auth_controller.dart';
+import '../../../features/auth/auth_controller.dart';
 import '../data/messaging_api.dart';
+
+/// Builds a short looping "ring ring" tone (WAV, 8 kHz mono) so callers and
+/// callees hear an audible ring without shipping a binary audio asset.
+Uint8List _buildRingtoneWav() {
+  const sampleRate = 8000;
+  const numSamples = sampleRate; // 1 second, looped
+  const amplitude = 14000.0;
+  List<int> w32(int v) => [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
+  List<int> w16(int v) => [v & 0xff, (v >> 8) & 0xff];
+  final dataBytes = numSamples * 2;
+  final header = <int>[]
+    ..addAll('RIFF'.codeUnits)
+    ..addAll(w32(36 + dataBytes))
+    ..addAll('WAVE'.codeUnits)
+    ..addAll('fmt '.codeUnits)
+    ..addAll(w32(16))
+    ..addAll(w16(1))
+    ..addAll(w16(1))
+    ..addAll(w32(sampleRate))
+    ..addAll(w32(sampleRate * 2))
+    ..addAll(w16(2))
+    ..addAll(w16(16))
+    ..addAll('data'.codeUnits)
+    ..addAll(w32(dataBytes));
+  final out = BytesBuilder()..add(header);
+  for (var i = 0; i < numSamples; i++) {
+    final t = i / sampleRate;
+    final phase = t % 1.0;
+    final env = (phase < 0.35 || (phase >= 0.5 && phase < 0.85)) ? 1.0 : 0.0;
+    final s = (amplitude * env * sin(2 * pi * 440 * t)).round().clamp(-32768, 32767);
+    out.addByte(s & 0xff);
+    out.addByte((s >> 8) & 0xff);
+  }
+  return out.takeBytes();
+}
+
+final _ringtoneBytes = _buildRingtoneWav();
 
 /// Lifecycle of a peer-to-peer call. Purely signaling state - the actual audio
 /// and video flow over a WebRTC peer connection.
@@ -83,6 +123,7 @@ class CallController extends Notifier<CallState> {
   String? _pendingOffer;
   bool _isCaller = false;
   String _bookingId = '';
+  AudioPlayer? _ringPlayer;
 
   RTCVideoRenderer get localRenderer => _localRenderer;
   RTCVideoRenderer get remoteRenderer => _remoteRenderer;
@@ -102,6 +143,9 @@ class CallController extends Notifier<CallState> {
       _disposed = true;
       _sub?.cancel();
       _fcmSub?.cancel();
+      try {
+        _ringPlayer?.dispose();
+      } catch (_) {}
       unawaited(_teardown());
     });
     return const CallState();
@@ -132,6 +176,7 @@ class CallController extends Notifier<CallState> {
       otherName: otherName,
       callId: callId,
     );
+    _startRinging();
     try {
       await _initPeer(kind);
       final offer = await _peer!.createOffer();
@@ -176,6 +221,7 @@ class CallController extends Notifier<CallState> {
     _isCaller = false;
     _answeredAt = DateTime.now();
     state = current.copyWith(phase: CallPhase.connecting, error: null);
+    _stopRinging();
     try {
       await _initPeer(current.kind);
       await _peer!.setRemoteDescription(RTCSessionDescription(_pendingOffer!, 'offer'));
@@ -261,6 +307,7 @@ class CallController extends Notifier<CallState> {
         if (_matches(event) && _isCaller && state.phase == CallPhase.outgoing) {
           _answeredAt = DateTime.now();
           state = state.copyWith(phase: CallPhase.connecting, error: null);
+          _stopRinging();
         }
       case 'call_reject':
         if (_matches(event) && _isCaller) {
@@ -403,6 +450,29 @@ class CallController extends Notifier<CallState> {
   }
 
   // -------------------------------------------------------------------------
+  // Ringing sound
+  // -------------------------------------------------------------------------
+
+  void _startRinging() {
+    try {
+      _ringPlayer ??= AudioPlayer();
+      _ringPlayer!
+        ..setReleaseMode(ReleaseMode.loop)
+        ..play(BytesSource(_ringtoneBytes), mode: PlayerMode.lowLatency);
+    } catch (_) {
+      // Audio is best-effort.
+    }
+  }
+
+  void _stopRinging() {
+    try {
+      _ringPlayer?.stop();
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // WebRTC plumbing
   // -------------------------------------------------------------------------
 
@@ -438,6 +508,20 @@ class CallController extends Notifier<CallState> {
           ? {'facingMode': 'user', 'width': 1280, 'height': 720}
           : false,
     });
+    // Guard against a teardown that raced while we were awaiting the mic: if
+    // the call was cancelled/released in the meantime, drop the stream right
+    // away so the microphone is never left on.
+    if (_disposed || _peer == null) {
+      for (final track in media.getTracks()) {
+        try {
+          track.stop();
+        } catch (_) {}
+      }
+      try {
+        await media.dispose();
+      } catch (_) {}
+      return;
+    }
     _localStream = media;
     _localRenderer.srcObject = media;
     for (final track in media.getTracks()) {
@@ -551,23 +635,36 @@ class CallController extends Notifier<CallState> {
     _answeredAt = null;
     _isCaller = false;
     _bookingId = '';
+    _stopRinging();
 
-    final pc = _peer;
-    _peer = null;
-    try {
-      if (pc != null) {
-        pc.onIceCandidate = null;
-        pc.onTrack = null;
-        await pc.close();
-      }
-      final media = _localStream;
-      _localStream = null;
-      if (media != null) {
+    // Stop the local tracks first so a failure while closing the peer
+    // connection can never leave the microphone or camera on.
+    final media = _localStream;
+    _localStream = null;
+    if (media != null) {
+      try {
         for (final track in media.getTracks()) {
           await track.stop();
         }
         await media.dispose();
+      } catch (_) {
+        // Best effort cleanup.
       }
+    }
+
+    final pc = _peer;
+    _peer = null;
+    if (pc != null) {
+      try {
+        pc.onIceCandidate = null;
+        pc.onTrack = null;
+        await pc.close();
+      } catch (_) {
+        // Best effort cleanup.
+      }
+    }
+
+    try {
       _localRenderer.srcObject = null;
       _remoteRenderer.srcObject = null;
       if (_renderersReady) {

@@ -37,6 +37,7 @@ const (
 	inCallReject   = "call_reject"
 	inCallCancel   = "call_cancel"
 	inCallEnd      = "call_end"
+	inTyping       = "typing"
 )
 
 const (
@@ -259,6 +260,17 @@ func (h *Hub) readPump(cl *Client, conn *websocket.Conn, userStore *users.Store)
 				"op":          frame.Op,
 				"data":        frame.Data,
 				"call_id":     frame.CallID,
+				"from_user_id": cl.UserID,
+				"to_user_id":  frame.ToUserID,
+			}
+			h.SendToUser(frame.ToUserID, relay)
+		case inTyping:
+			if frame.ToUserID == "" {
+				continue
+			}
+			relay := map[string]any{
+				"op":           frame.Op,
+				"data":         frame.Data,
 				"from_user_id": cl.UserID,
 				"to_user_id":  frame.ToUserID,
 			}
